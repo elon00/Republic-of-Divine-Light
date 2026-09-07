@@ -1,0 +1,36 @@
+{
+  "system": "REPUBLIC-OF-DIVINE-LIGHT",
+  "version": "1.0.0",
+  "status": "EVIDENCE_BASED_PQC_PROTOCOL",
+  "description": "Citizen Web Portal & Visual Dashboard for the Post-Quantum Cyber-Nation Ecosystem",
+  "truthTaxonomy": {
+    "cryptographicCore": "PURE_TYPESCRIPT_PQC_EXECUTION",
+    "kemScheme": "NIST_FIPS_203_ML_KEM_768",
+    "signatureScheme": "NIST_FIPS_204_ML_DSA_65",
+    "consensusProtocol": "RDL_CONWAY_AUTOMATA_AND_SOLANA_ANCHOR",
+    "simulationEliminated": true,
+    "weakestLinkGate": "H=0.60 (Pending external 3rd-party audit)",
+    "auditFirmStatus": "PENDING_EXTERNAL_AUDIT"
+  },
+  "subsystems": [
+    {
+      "name": "PQCEngine",
+      "path": "src/pqcEngine.js",
+      "status": "VERIFIED_NIST_FIPS_203_204",
+      "wire": {
+        "kemPublicKeyBytes": 1184,
+        "kemSecretKeyBytes": 2400,
+        "kemCiphertextBytes": 1088,
+        "kemSharedSecretBytes": 32,
+        "dsaPublicKeyBytes": 1952,
+        "dsaSecretKeyBytes": 4032,
+        "dsaSignatureBytes": 3309
+      }
+    },
+    {
+      "name": "CitizenPortal",
+      "path": "index.html",
+      "status": "VERIFIED_STANDALONE_WEB_PORTAL"
+    }
+  ]
+}
