@@ -8,7 +8,8 @@
     "test:nist": "node tests/nist-pqc.test.mjs",
     "audit:crypto": "node scripts/audit-crypto.mjs",
     "reality:universal": "tsx scripts/reality-universal.ts",
-    "reality:certify": "tsx scripts/generate-urs-certificate.ts"
+    "reality:certify": "tsx scripts/generate-urs-certificate.ts",
+    "qmoosa:finish": "npm test && npm run test:nist && npm run audit:crypto && npm run reality:universal"
   },
   "dependencies": {
     "@noble/hashes": "^1.7.1",
