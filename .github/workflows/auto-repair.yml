@@ -22,6 +22,30 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  observe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Record upstream CI result
+        run: |
+          {
+            echo "## Auto Repair"
+            echo
+            if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
+              echo "- Upstream workflow: `${{ github.event.workflow_run.name }}`"
+              echo "- Upstream conclusion: `${{ github.event.workflow_run.conclusion }}`"
+              echo "- Source branch: `${{ github.event.workflow_run.head_branch }}`"
+              echo "- Source SHA: `${{ github.event.workflow_run.head_sha }}`"
+              if [ "${{ github.event.workflow_run.conclusion }}" = "failure" ]; then
+                echo "- Repair controller: eligible to run"
+              else
+                echo "- Repair controller: no repair needed"
+              fi
+            else
+              echo "- Manual repair dispatch requested"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
   repair:
     if: >-
       github.event_name == 'workflow_dispatch' ||
