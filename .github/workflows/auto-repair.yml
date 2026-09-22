@@ -1,0 +1,203 @@
+name: Auto Repair
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch to diagnose and repair
+        required: false
+        default: main
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+
+concurrency:
+  group: auto-repair-${{ github.event.workflow_run.id || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'failure' &&
+       github.event.workflow_run.head_repository.full_name == github.repository &&
+       !startsWith(github.event.workflow_run.head_branch, 'automation/auto-repair-'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Resolve failed revision
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MANUAL_REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
+            source_sha="$(jq -r '.workflow_run.head_sha' "$GITHUB_EVENT_PATH")"
+            source_branch="$(jq -r '.workflow_run.head_branch' "$GITHUB_EVENT_PATH")"
+            failed_run_id="$(jq -r '.workflow_run.id' "$GITHUB_EVENT_PATH")"
+          else
+            source_branch="${MANUAL_REF:-main}"
+            source_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$source_branch" --jq .sha)"
+            failed_run_id="manual-$GITHUB_RUN_ID"
+          fi
+
+          echo "sha=$source_sha" >> "$GITHUB_OUTPUT"
+          echo "branch=$source_branch" >> "$GITHUB_OUTPUT"
+          echo "failed_run_id=$failed_run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout repair controller
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: controller
+
+      - name: Checkout failed revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.source.outputs.sha }}
+          fetch-depth: 0
+          path: target
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Reproduce install
+        working-directory: target
+        run: npm install --ignore-scripts
+
+      - name: Apply deterministic repairs
+        working-directory: target
+        run: |
+          node ../controller/scripts/auto-repair.mjs
+          npm install --package-lock-only --ignore-scripts
+
+      - name: Verify repaired tree
+        id: verify
+        continue-on-error: true
+        working-directory: target
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          npm test
+          npm run test:nist
+          npm run audit:crypto
+          npm run reality:universal
+          npm audit --audit-level=high
+
+      - name: Remove generated verification artifacts
+        if: always()
+        working-directory: target
+        run: |
+          git checkout -- reality/URS_SCORECARD.json 2>/dev/null || rm -f reality/URS_SCORECARD.json
+
+      - name: Escalate when safe repair cannot pass
+        if: steps.verify.outcome != 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FAILED_RUN_ID: ${{ steps.source.outputs.failed_run_id }}
+          SOURCE_BRANCH: ${{ steps.source.outputs.branch }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          cat > /tmp/auto-repair-issue.md <<EOF
+          The self-healing CI controller reproduced a failure on `$SOURCE_BRANCH` at `$SOURCE_SHA`, applied its allow-listed deterministic repairs, and the full verification suite still failed.
+
+          No force dependency upgrades, test bypasses, or unsafe source rewrites were applied.
+
+          Source workflow run: https://github.com/$GITHUB_REPOSITORY/actions/runs/$FAILED_RUN_ID
+          Auto-repair run: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+          EOF
+
+          gh issue create             --repo "$GITHUB_REPOSITORY"             --title "[auto-repair] CI failure $FAILED_RUN_ID requires manual repair"             --body-file /tmp/auto-repair-issue.md
+          exit 1
+
+      - name: Detect repair diff
+        if: steps.verify.outcome == 'success'
+        id: diff
+        working-directory: target
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Retry transient failure
+        if: >-
+          steps.verify.outcome == 'success' &&
+          steps.diff.outputs.changed == 'false' &&
+          github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FAILED_RUN_ID: ${{ steps.source.outputs.failed_run_id }}
+        run: gh run rerun "$FAILED_RUN_ID" --failed --repo "$GITHUB_REPOSITORY"
+
+      - name: Commit verified repair
+        if: steps.verify.outcome == 'success' && steps.diff.outputs.changed == 'true'
+        id: commit
+        working-directory: target
+        env:
+          SOURCE_BRANCH: ${{ steps.source.outputs.branch }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          FAILED_RUN_ID: ${{ steps.source.outputs.failed_run_id }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(ci): auto-repair failed run $FAILED_RUN_ID"
+
+          if [ "$SOURCE_BRANCH" = "$DEFAULT_BRANCH" ]; then
+            repair_branch="automation/auto-repair-$FAILED_RUN_ID"
+            git push origin "HEAD:refs/heads/$repair_branch"
+            gh pr create               --repo "$GITHUB_REPOSITORY"               --base "$DEFAULT_BRANCH"               --head "$repair_branch"               --title "fix(ci): verified auto-repair for run $FAILED_RUN_ID"               --body "Generated by the repository self-healing CI controller after reproducing the failure and passing the complete verification suite. No force upgrades or test bypasses were used."
+            echo "verified_ref=$repair_branch" >> "$GITHUB_OUTPUT"
+          else
+            remote_sha="$(git ls-remote origin "refs/heads/$SOURCE_BRANCH" | cut -f1)"
+            if [ "$remote_sha" != "$SOURCE_SHA" ]; then
+              echo "Target branch advanced from $SOURCE_SHA to $remote_sha; refusing stale auto-push."
+              exit 1
+            fi
+
+            if git push origin "HEAD:refs/heads/$SOURCE_BRANCH"; then
+              echo "verified_ref=$SOURCE_BRANCH" >> "$GITHUB_OUTPUT"
+            else
+              repair_branch="automation/auto-repair-$FAILED_RUN_ID"
+              git push origin "HEAD:refs/heads/$repair_branch"
+              gh pr create                 --repo "$GITHUB_REPOSITORY"                 --base "$SOURCE_BRANCH"                 --head "$repair_branch"                 --title "fix(ci): verified repair for $SOURCE_BRANCH"                 --body "Safe fallback repair PR generated after direct branch update was unavailable. The repair passed the repository verification suite before this PR was opened."
+              echo "verified_ref=$repair_branch" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Re-run CI on repaired revision
+        if: >-
+          steps.verify.outcome == 'success' &&
+          steps.diff.outputs.changed == 'true' &&
+          steps.commit.outputs.verified_ref != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERIFIED_REF: ${{ steps.commit.outputs.verified_ref }}
+        run: gh workflow run CI --ref "$VERIFIED_REF" --repo "$GITHUB_REPOSITORY"
+
+      - name: Repair summary
+        if: always()
+        run: |
+          {
+            echo "## Auto Repair"
+            echo
+            echo "- Source branch: `${{ steps.source.outputs.branch }}`"
+            echo "- Source SHA: `${{ steps.source.outputs.sha }}`"
+            echo "- Verification: `${{ steps.verify.outcome }}`"
+            echo "- Source changes: `${{ steps.diff.outputs.changed || 'unknown' }}`"
+          } >> "$GITHUB_STEP_SUMMARY"
