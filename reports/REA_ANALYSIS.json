@@ -1,0 +1,92 @@
+{
+  "engine": "REA_Reverse_Engineer_Anything",
+  "status": "STRUCTURE_RECONSTRUCTED",
+  "analyzed_files": 28,
+  "manifest": {
+    "AUTO_REPAIR.md": {
+      "bytes": 1864
+    },
+    "CONTRIBUTING.md": {
+      "bytes": 918
+    },
+    "index.html": {
+      "bytes": 10184
+    },
+    "netlify.toml": {
+      "bytes": 253
+    },
+    "package.json": {
+      "bytes": 661
+    },
+    "RDL_CONSTITUTION.md": {
+      "bytes": 1896
+    },
+    "README.md": {
+      "bytes": 2404
+    },
+    "REALITY_MANIFEST.json": {
+      "bytes": 1371
+    },
+    "SECURITY.md": {
+      "bytes": 1216
+    },
+    ".github\\dependabot.yml": {
+      "bytes": 283
+    },
+    "reality\\URS_EVIDENCE_CERTIFICATE.json": {
+      "bytes": 11651
+    },
+    "reality\\URS_EVIDENCE_CERTIFICATE.md": {
+      "bytes": 2430
+    },
+    "reality\\URS_SCORECARD.json": {
+      "bytes": 2468
+    },
+    "scripts\\audit-crypto.mjs": {
+      "bytes": 7182
+    },
+    "scripts\\auto-repair.mjs": {
+      "bytes": 3662
+    },
+    "scripts\\generate-urs-certificate.ts": {
+      "bytes": 6386
+    },
+    "scripts\\reality-universal.ts": {
+      "bytes": 17072
+    },
+    "scripts\\rea_inspector.py": {
+      "bytes": 1485
+    },
+    "scripts\\rsi_engine.py": {
+      "bytes": 2039
+    },
+    "src\\portfolioScanner.js": {
+      "bytes": 1916
+    },
+    "src\\pqcEngine.js": {
+      "bytes": 3042
+    },
+    "src\\realityLaw.js": {
+      "bytes": 1486
+    },
+    "tests\\nist-pqc.test.mjs": {
+      "bytes": 4763
+    },
+    "tests\\reality_check_harness.py": {
+      "bytes": 1250
+    },
+    ".github\\workflows\\auto-repair.yml": {
+      "bytes": 9467
+    },
+    ".github\\workflows\\ci.yml": {
+      "bytes": 744
+    },
+    ".github\\workflows\\pages.yml": {
+      "bytes": 765
+    },
+    ".github\\workflows\\qmoosa-rsi-rea-sync.yml": {
+      "bytes": 531
+    }
+  },
+  "timestamp": 1794031038
+}
